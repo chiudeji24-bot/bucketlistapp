@@ -4,9 +4,15 @@ import App from './App'
 import { Amplify } from 'aws-amplify'
 import { withAuthenticator } from '@aws-amplify/ui-react'
 import '@aws-amplify/ui-react/styles.css'
-import amplifyconfig from './amplifyconfiguration.json'
 
-Amplify.configure(amplifyconfig)
+Amplify.configure({
+  Auth: {
+    Cognito: {
+      userPoolId: 'us-west-2_eV1NeyZ55',
+      userPoolClientId: '5hhvaf1kctcm63im4fvlhvuchj',
+    }
+  }
+});
 
 function Root() {
   return <App />
