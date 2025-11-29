@@ -189,6 +189,7 @@ export default function App() {
             ))}
           </Grid>
           <Button onClick={signOut}>Sign Out</Button>
+          {/* FINAL FIX – fresh deploy {new Date().toISOString()} */}
         </Flex>
       )}
     </Authenticator>
