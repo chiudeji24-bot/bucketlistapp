@@ -1,116 +1,196 @@
-import { useState, useEffect } from 'react';
-import { generateClient } from 'aws-amplify/data';
-import { Authenticator, useAuthenticator } from '@aws-amplify/ui-react';
-import { uploadData, getUrl, remove } from 'aws-amplify/storage';
-import '@aws-amplify/ui-react/styles.css';
+import { useState, useEffect } from "react";
+import {
+  Authenticator,
+  Button,
+  Text,
+  TextField,
+  Heading,
+  Flex,
+  View,
+  Image,
+  Grid,
+  Divider,
+} from "@aws-amplify/ui-react";
+import { Amplify } from "aws-amplify";
+import "@aws-amplify/ui-react/styles.css";
+import { getUrl } from "aws-amplify/storage";
+import { uploadData } from "aws-amplify/storage";
+import { generateClient } from "aws-amplify/data";
+import outputs from "../amplify_outputs.json";
+/**
+ * @type {import('aws-amplify/data').Client<import('../amplify/data/resource').Schema>}
+ */
 
-const client = generateClient();
 
-function App() {
-  const { user, signOut } = useAuthenticator();
+Amplify.configure(outputs);
+const client = generateClient({
+  authMode: "userPool",
+});
+
+
+export default function App() {
   const [items, setItems] = useState([]);
-  const [newTitle, setNewTitle] = useState('');
-  const [file, setFile] = useState(null);
+
 
   useEffect(() => {
-    if (user) fetchItems();
-  }, [user]);
+    fetchItems();
+  }, []);
+
 
   async function fetchItems() {
-    const { data: bucketItems } = await client.models.BucketItem.list();
-    const itemsWithImages = await Promise.all(
-      bucketItems.map(async (item) => {
-        if (item.imageKey) {
-          const url = await getUrl({ key: item.imageKey });
-          item.imageUrl = url.url.toString();
+    const { data: items } = await client.models.BucketItem.list();
+    await Promise.all(
+      items.map(async (item) => {
+        if (item.image) {
+          const linkToStorageFile = await getUrl({
+            path: ({ identityId }) => `media/${identityId}/${item.image}`,
+          });
+          console.log(linkToStorageFile.url);
+          item.image = linkToStorageFile.url;
         }
         return item;
       })
     );
-    setItems(itemsWithImages);
+    console.log(items);
+    setItems(items);
   }
 
-  async function addItem() {
-    if (!newTitle.trim()) return;
 
-    let imageKey;
-    if (file) {
-      imageKey = `media/${user.userId}/${crypto.randomUUID()}-${file.name}`;
-      await uploadData({ key: imageKey, data: file });
-    }
+  async function createItem(event) {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    console.log(form.get("image").name);
 
-    await client.models.BucketItem.create({
-      title: newTitle,
-      completed: false,
-      imageKey: imageKey || null,
+
+    const { data: newItem } = await client.models.BucketItem.create({
+      title: form.get("title"),
+      description: form.get("description"),
+      image: form.get("image").name,
     });
 
-    setNewTitle('');
-    setFile(null);
+
+    console.log(newItem);
+    if (newItem.image)
+      await uploadData({
+        path: ({ identityId }) => `media/${identityId}/${newItem.image}`,
+        data: form.get("image"),
+      }).result;
+
+
+    fetchItems();
+    event.target.reset();
+  }
+
+
+  async function deleteItem({ id }) {
+    const toBeDeletedItem = {
+      id: id,
+    };
+
+
+    const { data: deletedItem } = await client.models.BucketItem.delete(
+      toBeDeletedItem
+    );
+    console.log(deletedItem);
+
+
     fetchItems();
   }
 
-  async function toggleComplete(id, completed) {
-    await client.models.BucketItem.update({ id, completed: !completed });
-    fetchItems();
-  }
-
-  async function deleteItem(id, imageKey) {
-    if (imageKey) await remove({ key: imageKey });
-    await client.models.BucketItem.delete({ id });
-    fetchItems();
-  }
 
   return (
     <Authenticator>
-      {() => (
-        <div style={{ padding: '2rem', fontFamily: 'Arial, sans-serif', maxWidth: '800px', margin: '0 auto' }}>
-          <h1>{user?.signInDetails?.loginId}'s Bucket List</h1>
-          <button onClick={signOut} style={{ position: 'absolute', top: 20, right: 20 }}>
-            Sign out
-          </button>
+      {({ signOut }) => (
+        <Flex
+          className="App"
+          justifyContent="center"
+          alignItems="center"
+          direction="column"
+          width="70%"
+          margin="0 auto"
+        >
+          <Heading level={1}>My Bucket List</Heading>
+          <View as="form" margin="3rem 0" onSubmit={createItem}>
+            <Flex
+              direction="column"
+              justifyContent="center"
+              gap="2rem"
+              padding="2rem"
+            >
+              <TextField
+                name="title"
+                placeholder="Bucket List Item"
+                label="Bucket List Item"
+                labelHidden
+                variation="quiet"
+                required
+              />
+              <TextField
+                name="description"
+                placeholder="Description"
+                label="Description"
+                labelHidden
+                variation="quiet"
+                required
+              />
+              <View
+                name="image"
+                as="input"
+                type="file"
+                alignSelf={"end"}
+                accept="image/png, image/jpeg"
+              />
 
-          <div style={{ margin: '2rem 0', padding: '1rem', border: '2px dashed #ccc', borderRadius: '8px' }}>
-            <input
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="What do you want to do before you kick the bucket?"
-              style={{ padding: '0.8rem', fontSize: '1.1rem', width: '100%', marginBottom: '1rem' }}
-            />
-            <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files[0])} />
-            <button onClick={addItem} style={{ padding: '0.8rem 1.5rem', marginTop: '1rem' }}>
-              Add Item
-            </button>
-          </div>
 
-          <ul style={{ listStyle: 'none', padding: 0 }}>
+              <Button type="submit" variation="primary">
+                Add to Bucket List
+              </Button>
+            </Flex>
+          </View>
+          <Divider />
+          <Heading level={2}>My Bucket List Items</Heading>
+          <Grid
+            margin="3rem 0"
+            autoFlow="column"
+            justifyContent="center"
+            gap="2rem"
+            alignContent="center"
+          >
             {items.map((item) => (
-              <li key={item.id} style={{ margin: '2rem 0', padding: '1rem', border: '1px solid #ddd', borderRadius: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <input
-                    type="checkbox"
-                    checked={item.completed}
-                    onChange={() => toggleComplete(item.id, item.completed)}
+              <Flex
+                key={item.id || item.title}
+                direction="column"
+                justifyContent="center"
+                alignItems="center"
+                gap="2rem"
+                border="1px solid #ccc"
+                padding="2rem"
+                borderRadius="5%"
+                className="box"
+              >
+                <View>
+                  <Heading level="3">{item.title}</Heading>
+                </View>
+                <Text fontStyle="italic">{item.description}</Text>
+                {item.image && (
+                  <Image
+                    src={item.image}
+                    alt={`Visual for ${item.title}`}
+                    style={{ width: 400 }}
                   />
-                  <span style={{ textDecoration: item.completed ? 'line-through' : 'none', fontSize: '1.3rem' }}>
-                    {item.title}
-                  </span>
-                  <button onClick={() => deleteItem(item.id, item.imageKey)} style={{ marginLeft: 'auto', color: 'red' }}>
-                    Delete
-                  </button>
-                </div>
-                {item.imageUrl && (
-                  <img src={item.imageUrl} alt={item.title} style={{ maxWidth: '100%', marginTop: '1rem', borderRadius: '8px' }} />
                 )}
-              </li>
+                <Button
+                  variation="destructive"
+                  onClick={() => deleteItem(item)}
+                >
+                  Delete Item
+                </Button>
+              </Flex>
             ))}
-          </ul>
-
-          {items.length === 0 && <p>No items yet — add something awesome!</p>}
-        </div>
+          </Grid>
+          <Button onClick={signOut}>Sign Out</Button>
+        </Flex>
       )}
     </Authenticator>
   );
 }
-
-export default App;
